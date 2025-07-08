@@ -93,7 +93,7 @@ class HeatmapApp(QMainWindow):
         
         # 设置初始值
         self.row_edit.setText("20")
-        self.col_edit.setText("12")
+        self.col_edit.setText("10")
         self.column_edit.setText("3")
         self.start_row_edit.setText("1")
         self.process_combo.setCurrentIndex(0)
@@ -386,71 +386,60 @@ class HeatmapApp(QMainWindow):
         
         # 扫描文件夹中的Excel文件
         self.scan_excel_files()
-    
+
     def scan_excel_files(self):
         """扫描文件夹中的Excel文件并添加到列表"""
         if not self.selected_folder:
             return
-        
+
         # 清空文件列表
         self.file_list.clear()
         self.current_file_row_counts = {}
         self.min_row_count = 0
         self.min_row_label.setText("-")
-        
+
         try:
-            # 获取文件夹中的所有xls文件
-            files = [f for f in os.listdir(self.selected_folder) if f.endswith('.xls')]
-            # 按照文件名中的数字顺序排序
-            files.sort(key=lambda x: int(''.join(filter(str.isdigit, x))))
-            
-            # 用于计算最小行数的列表
-            row_counts = []
-            
-            # 添加到文件列表并获取行数
-            for file in files:
-                file_path = os.path.join(self.selected_folder, file)
-                
-                try:
-                    # 获取文件行数
-                    workbook = xlrd.open_workbook(file_path)
-                    sheet = workbook.sheet_by_index(0)
-                    row_count = sheet.nrows
-                    self.current_file_row_counts[file] = row_count
-                    row_counts.append(row_count)
-                except Exception as e:
-                    print(f"获取文件 {file} 行数时出错: {str(e)}")
-                    row_count = 0
-                
-                item = QListWidgetItem(f"{file} ({row_count}行)")
-                item.setData(Qt.UserRole, file)  # 存储文件名
-                self.file_list.addItem(item)
-            
-            if files:
-                file_count = len(files)
-                self.file_count_label.setText(f"{file_count} 个")
-                self.status_label.setText(f"找到 {file_count} 个Excel文件")
-                self.plot_btn.setEnabled(True)
-                self.clear_btn.setEnabled(True)
-                self.auto_end_row_btn.setEnabled(True)
-                
-                # 计算最小行数
-                if row_counts:
-                    self.min_row_count = min(row_counts)
-                    self.min_row_label.setText(str(self.min_row_count))
-                
-                # 设置起始行和结束行的默认值
-                self.start_row_edit.setText("1")
-                if self.min_row_count > 0:
-                    self.end_row_edit.setText(str(self.min_row_count))
-                else:
-                    self.end_row_edit.setText("50")
-            else:
+            # 获取文件信息
+            files_info = read_files.get_excel_files_info(self.selected_folder)
+
+            if not files_info:
                 self.status_label.setText("未找到Excel文件")
                 self.plot_btn.setEnabled(False)
                 self.clear_btn.setEnabled(False)
                 self.auto_end_row_btn.setEnabled(False)
-                
+                return
+
+            # 用于计算最小行数的列表
+            row_counts = []
+
+            # 添加到文件列表
+            for file_name, file_path, row_count in files_info:
+                self.current_file_row_counts[file_path] = row_count
+                row_counts.append(row_count)
+
+                item = QListWidgetItem(f"{file_name} ({row_count}行)")
+                item.setData(Qt.UserRole, file_path)  # 存储文件路径
+                self.file_list.addItem(item)
+
+            file_count = len(files_info)
+            self.file_count_label.setText(f"{file_count} 个")
+            self.status_label.setText(f"找到 {file_count} 个Excel文件")
+            self.plot_btn.setEnabled(True)
+            self.clear_btn.setEnabled(True)
+            self.auto_end_row_btn.setEnabled(True)
+
+            # 计算最小行数
+            if row_counts:
+                self.min_row_count = min(row_counts)
+                self.min_row_label.setText(str(self.min_row_count))
+
+            # 设置起始行和结束行的默认值
+            self.start_row_edit.setText("1")
+            if self.min_row_count > 0:
+                self.end_row_edit.setText(str(self.min_row_count))
+            else:
+                self.end_row_edit.setText("50")
+
         except Exception as e:
             QMessageBox.critical(self, "扫描错误", f"扫描文件夹时出错:\n{str(e)}")
             self.status_label.setText("扫描失败")
@@ -528,11 +517,11 @@ class HeatmapApp(QMainWindow):
                 QMessageBox.warning(self, "参数错误", "起始行必须小于结束行")
                 return
             
-            # 读取数据
+            # 读取数据 - 使用新的函数，传入文件路径列表
             self.raw_data = read_files.read_column_from_xls(
-                self.selected_folder, 
+                files,  # 传入文件路径列表
                 column_index,
-                start_row=start_row,
+                start_row=start_row,  # 1-based索引,排除每一组数据中第一个索引，即数据名称
                 end_row=end_row
             )
             
