@@ -656,7 +656,7 @@ class HeatmapApp(QMainWindow):
                 fmt=".2f",
                 xticklabels=self.show_ticks_cb.isChecked(),
                 yticklabels=self.show_ticks_cb.isChecked(),
-                cbar_kws={"shrink": 1}  # 控制颜色条大小
+                cbar_kws={"shrink": 1.2}  # 控制颜色条大小
             )
             
             # 设置标题 - 使用Times New Roman字体
