@@ -223,12 +223,7 @@ class HeatmapApp(QMainWindow):
             "标准处理", 
             "数据采样", 
             "RMS降采样", 
-            "均值缩减",
-            "中值缩减",
-            "指数平滑",
-            "小波降噪",
-            "Savitzky-Golay滤波",
-            "PCA降维"
+            "均值缩减"
         ])
         self.process_combo.setToolTip("选择数据处理方法")
         layout.addWidget(self.process_combo, 5, 1, 1, 5)
@@ -559,16 +554,7 @@ class HeatmapApp(QMainWindow):
                 processed_data = [handle_datas.rms_downsample(data, length) for data in self.cut_current_data]
             elif method_index == 3:  # 均值缩减
                 processed_data = [handle_datas.reduce_data(data, length, method='mean') for data in self.cut_current_data]
-            elif method_index == 4:  # 中值缩减
-                processed_data = [handle_datas.reduce_data_median(data, length) for data in self.cut_current_data]
-            elif method_index == 5:  # 指数平滑
-                processed_data = [handle_datas.exponential_moving_average(data, length) for data in self.cut_current_data]
-            elif method_index == 6:  # 小波降噪
-                processed_data = [handle_datas.wavelet_denoise(data, length) for data in self.cut_current_data]
-            elif method_index == 7:  # Savitzky-Golay滤波
-                processed_data = [handle_datas.savgol_smoothing(data, length) for data in self.cut_current_data]
-            elif method_index == 8:  # PCA降维
-                processed_data = [handle_datas.pca_reduction(data, length) for data in self.cut_current_data]
+            
                         
             # 更新数据矩阵
             self.data_matrix = np.zeros((0, length))  # 初始化为空矩阵
