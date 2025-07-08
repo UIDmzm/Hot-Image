@@ -12,9 +12,20 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt
 import xlrd
-import module.read_files as read_files
-import module.handle_datas as handle_datas
-import matplotlib as mpl
+from matplotlib import font_manager
+import src.module.read_files as read_files
+import src.module.handle_datas as handle_datas
+
+# Times New Roman
+font_files = [
+    "/usr/share/fonts/truetype/custom/TIMES.TTF",
+    "/usr/share/fonts/truetype/custom/TIMESBD.TTF",
+    "/usr/share/fonts/truetype/custom/TIMESI.TTF",
+    "/usr/share/fonts/truetype/custom/TIMESBI.TTF"
+]
+
+for file in font_files:
+    font_manager.fontManager.addfont(file)
 
 class HeatmapApp(QMainWindow):
     def __init__(self):
