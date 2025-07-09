@@ -85,7 +85,6 @@ def read_column_from_xls(file_paths, column_index, start_row=1, end_row=None):
 
         except Exception as e:
             print(f"读取文件 {os.path.basename(file_path)} 时出错: {str(e)}")
-    print(all_data)
     return all_data
 
 

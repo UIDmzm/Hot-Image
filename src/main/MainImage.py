@@ -8,13 +8,18 @@ from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
     QPushButton, QLabel, QLineEdit, QComboBox, QFileDialog, QMessageBox,
     QListWidget, QListWidgetItem, QAbstractItemView, QGroupBox, QSplitter,
-    QCheckBox
+    QCheckBox, QSizePolicy
 )
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QTimer
 import xlrd
-from matplotlib import font_manager
+from matplotlib import font_manager, rcParams
+from matplotlib.font_manager import FontProperties
 import src.module.read_files as read_files
 import src.module.handle_datas as handle_datas
+import warnings
+
+# 忽略特定的字体警告
+warnings.filterwarnings("ignore", category=UserWarning, message="Glyph.*missing")
 
 # Times New Roman
 font_files = [
@@ -25,7 +30,12 @@ font_files = [
 ]
 
 for file in font_files:
-    font_manager.fontManager.addfont(file)
+    if os.path.exists(file):
+        font_manager.fontManager.addfont(file)
+
+# 设置支持中文的字体
+plt.rcParams['font.sans-serif'] = ['SimSun', 'Times New Roman']  # 使用宋体作为中文字体
+plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
 
 
 class HeatmapApp(QMainWindow):
@@ -34,22 +44,14 @@ class HeatmapApp(QMainWindow):
         self.setWindowTitle("热图数据分析工具")
         self.setGeometry(100, 100, 1400, 800)
 
-        # 设置全局字体为Times New Roman
-        plt.rcParams['font.family'] = 'Times New Roman'
-        plt.rcParams['font.size'] = 10
-        plt.rcParams['axes.titlesize'] = 12
-        plt.rcParams['axes.labelsize'] = 10
-        plt.rcParams['xtick.labelsize'] = 8
-        plt.rcParams['ytick.labelsize'] = 8
-
         # 初始化变量
         self.raw_data = None
         self.cut_current_data = None
         self.data_matrix = None
         self.selected_folder = ""
         self.current_heatmap_data = None
-        self.current_file_row_counts = {}  # 存储每个文件的行数
-        self.min_row_count = 0  # 存储最小行数
+        self.current_file_row_counts = {}
+        self.min_row_count = 0
 
         # 创建主控件和布局
         main_widget = QWidget()
@@ -61,20 +63,21 @@ class HeatmapApp(QMainWindow):
         self.splitter = QSplitter(Qt.Horizontal)
         main_layout.addWidget(self.splitter)
 
-        # 左侧：绘图区域 (70%)
+        # 左侧：绘图区域
         left_widget = QWidget()
         left_layout = QVBoxLayout(left_widget)
         left_layout.setContentsMargins(0, 0, 0, 0)
 
-        # 绘图区域
-        self.figure, self.ax = plt.subplots(figsize=(10, 8))
+        # 绘图区域 - 使用空图形初始化
+        self.figure = plt.figure()
         self.canvas = FigureCanvas(self.figure)
         self.canvas.setMinimumSize(800, 600)
+        self.canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         left_layout.addWidget(self.canvas)
 
         self.splitter.addWidget(left_widget)
 
-        # 右侧：控制面板和文件列表 (30%)
+        # 右侧：控制面板和文件列表
         right_widget = QWidget()
         right_layout = QVBoxLayout(right_widget)
         right_layout.setContentsMargins(5, 5, 5, 5)
@@ -90,7 +93,7 @@ class HeatmapApp(QMainWindow):
         self.splitter.addWidget(right_widget)
 
         # 设置分割器比例
-        self.splitter.setSizes([1000, 400])
+        self.splitter.setSizes([800, 400])
 
         # 设置初始值
         self.row_edit.setText("20")
@@ -98,8 +101,9 @@ class HeatmapApp(QMainWindow):
         self.column_edit.setText("3")
         self.start_row_edit.setText("1")
         self.process_combo.setCurrentIndex(0)
-        self.cmap_combo.setCurrentIndex(0)  # 默认选择 viridis
-        self.cbar_title_edit.setText("数值")  # 颜色条标题默认值
+        self.cmap_combo.setCurrentIndex(0)
+        self.cbar_title_edit.setText("Normalized Current")
+        self.font_size_edit.setText("10")
 
         # 应用样式
         self.apply_styles()
@@ -169,6 +173,7 @@ class HeatmapApp(QMainWindow):
         panel = QGroupBox("控制面板")
         layout = QGridLayout(panel)
         layout.setSpacing(10)
+
         layout.setColumnStretch(0, 1)
         layout.setColumnStretch(1, 1)
         layout.setColumnStretch(2, 1)
@@ -528,12 +533,12 @@ class HeatmapApp(QMainWindow):
             files.append(file_path)
         return files
 
-    def plot_heatmap(self):
-        """绘制热图"""
+    def prepare_data(self):
+        """准备热图数据，返回处理后的矩阵"""
         files = self.get_selected_files()
         if not files:
             QMessageBox.warning(self, "数据缺失", "请先选择文件")
-            return
+            return None
 
         try:
             # 获取参数
@@ -545,7 +550,7 @@ class HeatmapApp(QMainWindow):
 
             if start_row >= end_row:
                 QMessageBox.warning(self, "参数错误", "起始行必须小于结束行")
-                return
+                return None
 
             # 读取数据
             self.raw_data = read_files.read_column_from_xls(
@@ -557,7 +562,7 @@ class HeatmapApp(QMainWindow):
 
             if not self.raw_data:
                 QMessageBox.warning(self, "数据错误", "未能从文件中读取有效数据")
-                return
+                return None
 
             # 处理数据
             self.cut_current_data = handle_datas.cut_data(self.raw_data)
@@ -569,7 +574,7 @@ class HeatmapApp(QMainWindow):
                     self, "数据不足",
                     f"需要 {data_groups} 组数据，但只有 {len(self.cut_current_data)} 组可用"
                 )
-                return
+                return None
 
             # 根据选择的方法处理数据
             method_index = self.process_combo.currentIndex()
@@ -596,129 +601,175 @@ class HeatmapApp(QMainWindow):
                     length,
                     data_groups
                 )
-            # 获取字体大小
-            font_sizes = self.get_font_sizes()
-            # 获取颜色条标题
-            cbar_title = self.cbar_title_edit.text()
-            # 存储当前热图数据
-            self.current_heatmap_data = self.data_matrix.copy()
 
-            # 清除之前的绘图
-            self.figure.clear()
-
-            # 根据字体大小调整图形高度
-            # 基础高度8英寸，每增加10点字体高度增加1英寸
-            height_factor = 1 + (font_sizes["cbar_label"] - 10) / 40
-            height = max(8, 8 * height_factor)  # 最小高度8英寸
-
-            # 创建新的子图
-            self.ax = self.figure.add_subplot(111)
-            self.figure.set_size_inches(10, height)  # 设置新高度
-
-            # 获取选择的颜色条
-            cmap = self.cmap_combo.currentText()
-
-            # 绘制新热图
-            heatmap = sns.heatmap(
-                self.data_matrix,
-                ax=self.ax,
-                cmap=cmap,
-                annot=False,
-                fmt=".2f",
-                xticklabels=self.show_ticks_cb.isChecked(),
-                yticklabels=self.show_ticks_cb.isChecked(),
-                cbar_kws={
-                    "shrink": 1.0,  # 固定比例
-                    "location": "right",  # 位置在右侧
-                    "pad": 0.05,  # 与主图的间距
-                }
-            )
-
-            # 设置标题 - 使用大号字体
-            self.ax.set_title(
-                f"热图 - {self.process_combo.currentText()}",
-                fontfamily="Times New Roman",
-                fontsize=font_sizes["title"],
-                fontweight='bold',
-                pad=20
-            )
-
-            # 根据复选框设置坐标轴标签
-            if self.show_x_label_cb.isChecked():
-                self.ax.set_xlabel(
-                    "X轴",
-                    fontfamily="Times New Roman",
-                    fontsize=font_sizes["axis_label"],
-                    labelpad=15
-                )
-            else:
-                self.ax.set_xlabel("")
-
-            if self.show_y_label_cb.isChecked():
-                self.ax.set_ylabel(
-                    "Y轴",
-                    fontfamily="Times New Roman",
-                    fontsize=font_sizes["axis_label"],
-                    labelpad=15
-                )
-            else:
-                self.ax.set_ylabel("")
-
-            # 设置刻度标签字体
-            for label in self.ax.get_xticklabels():
-                label.set_fontname("Times New Roman")
-                label.set_fontsize(font_sizes["tick_label"])
-
-            for label in self.ax.get_yticklabels():
-                label.set_fontname("Times New Roman")
-                label.set_fontsize(font_sizes["tick_label"])
-
-            # 设置颜色条的字体 - 标题放在上方
-            if heatmap.collections[0].colorbar is not None:
-                cbar = heatmap.collections[0].colorbar
-
-                # 移除默认标签
-                cbar.set_label('')
-
-                # 创建新的标签放在上方
-                cbar.ax.set_title(
-                    cbar_title,
-                    fontfamily="Times New Roman",
-                    fontsize=font_sizes["cbar_label"],
-                    fontweight='bold',
-                    pad=10  # 与颜色条的间距
-                )
-
-                # 设置颜色条刻度标签
-                cbar.ax.tick_params(
-                    axis='y',
-                    labelsize=font_sizes["cbar_tick"],
-                    which='both'
-                )
-
-                # 确保所有刻度标签都应用Times New Roman
-                for label in cbar.ax.get_yticklabels():
-                    label.set_fontname("Times New Roman")
-                    label.set_fontweight('bold')
-
-            # 调整布局
-            self.figure.tight_layout()
-
-            # 更新画布
-            self.canvas.draw()
-
-            # 重置分割器比例以确保正确显示
-            self.splitter.setSizes([1000, 400])
-
-            self.status_label.setText(f"已绘制热图: 方法={self.process_combo.currentText()}, 文件={len(files)}个")
-            self.save_btn.setEnabled(True)
+            return self.data_matrix
 
         except ValueError:
             QMessageBox.warning(self, "输入错误", "请输入有效的数值")
         except Exception as e:
+            QMessageBox.critical(self, "数据处理错误", f"处理数据时出错:\n{str(e)}")
+            import traceback
+            print(traceback.format_exc())
+
+        return None
+
+    def draw_heatmap(self, ax, data, title="Hot Image", is_save=False):
+        """在给定的axes上绘制热图（通用绘图函数）"""
+        # 获取配置参数
+        font_sizes = self.get_font_sizes()
+        cmap = self.cmap_combo.currentText()
+        cbar_title = self.cbar_title_edit.text()
+        show_ticks = self.show_ticks_cb.isChecked()
+
+        # 创建自定义字体属性
+        title_font = FontProperties(family='Times New Roman', size=font_sizes["title"], weight='bold')
+        axis_font = FontProperties(family='Times New Roman', size=font_sizes["axis_label"])
+        tick_font = FontProperties(family='Times New Roman', size=font_sizes["tick_label"])
+        cbar_font = FontProperties(family='Times New Roman', size=font_sizes["cbar_label"], weight='bold')
+        cbar_tick_font = FontProperties(family='Times New Roman', size=font_sizes["cbar_tick"])
+
+        # 计算图形尺寸
+        rows, cols = data.shape
+        aspect_ratio = cols / max(rows, 1)  # 避免除以零
+
+        # 设置不同场景下的基础尺寸
+        base_width = 12 if is_save else 10
+        base_height = 10 if is_save else 8
+
+        # 计算调整后的高度
+        adjusted_height = max(base_height, base_width / max(aspect_ratio, 0.5))
+
+        # 设置图形尺寸
+        if not is_save:
+            self.figure.set_size_inches(base_width, adjusted_height)
+
+        # 绘制热图
+        heatmap = sns.heatmap(
+            data,
+            ax=ax,
+            cmap=cmap,
+            annot=False,
+            fmt=".2f",
+            xticklabels=show_ticks,
+            yticklabels=show_ticks,
+            cbar_kws={
+                "shrink": 1.0,  # 不缩放，保持原始高度
+                "location": "right",
+                "pad": 0.05,
+                "aspect": 20  # 控制颜色条细长程度
+            }
+        )
+
+        # 设置标题
+        ax.set_title(
+            title,
+            fontproperties=title_font,
+            pad=20
+        )
+
+        # 设置坐标轴标签
+        if self.show_x_label_cb.isChecked():
+            ax.set_xlabel(
+                "X轴",
+                fontproperties=axis_font,
+                labelpad=15
+            )
+        else:
+            ax.set_xlabel("")
+
+        if self.show_y_label_cb.isChecked():
+            ax.set_ylabel(
+                "Y轴",
+                fontproperties=axis_font,
+                labelpad=15
+            )
+        else:
+            ax.set_ylabel("")
+
+        # 设置刻度标签字体
+        for label in ax.get_xticklabels():
+            label.set_fontproperties(tick_font)
+
+        for label in ax.get_yticklabels():
+            label.set_fontproperties(tick_font)
+
+        # 设置颜色条 - 确保高度与图片一致
+        if heatmap.collections[0].colorbar is not None:
+            cbar = heatmap.collections[0].colorbar
+
+            # 移除默认标签
+            cbar.set_label('')
+
+            # 创建新的标签放在上方
+            cbar.ax.set_title(
+                cbar_title,
+                fontproperties=cbar_font,
+                pad=10
+            )
+
+            # 设置颜色条刻度标签
+            cbar.ax.tick_params(
+                axis='y',
+                labelsize=font_sizes["cbar_tick"]
+            )
+
+            # 确保所有刻度标签都应用Times New Roman
+            for label in cbar.ax.get_yticklabels():
+                label.set_fontproperties(cbar_tick_font)
+
+        return heatmap
+
+    def plot_heatmap(self):
+        """在界面上绘制热图"""
+        data = self.prepare_data()
+        if data is None:
+            return
+
+        self.current_heatmap_data = data.copy()
+
+        try:
+            # 清除之前的绘图
+            self.figure.clear()
+            self.ax = self.figure.add_subplot(111)
+
+            # 绘制热图
+            self.draw_heatmap(self.ax, data, "热图")
+
+            # 调整布局
+            self.figure.tight_layout(pad=2.0)
+
+            # 立即更新画布
+            self.canvas.draw()
+
+            # 延迟执行最终调整
+            QTimer.singleShot(100, self.finalize_plot_update)
+
+            self.status_label.setText("热图绘制完成，正在更新显示...")
+
+        except Exception as e:
             QMessageBox.critical(self, "绘图错误", f"绘制热图时出错:\n{str(e)}")
             import traceback
             print(traceback.format_exc())
+
+    def finalize_plot_update(self):
+        """最终完成绘图更新"""
+        try:
+            # 重置分割器比例
+            self.splitter.setSizes([800, 400])
+
+            # 强制调整布局
+            self.figure.subplots_adjust(left=0.1, right=0.9, top=0.9, bottom=0.1)
+
+            # 更新画布
+            self.canvas.draw()
+
+            # 启用保存按钮
+            self.save_btn.setEnabled(True)
+            self.status_label.setText(
+                f"已绘制热图: 方法={self.process_combo.currentText()}, 文件={len(self.get_selected_files())}个")
+
+        except Exception as e:
+            print(f"最终更新错误: {str(e)}")
 
     def save_image(self):
         """保存当前热图为图片文件"""
@@ -737,99 +788,14 @@ class HeatmapApp(QMainWindow):
             return
 
         try:
-            # 获取字体大小
-            font_sizes = self.get_font_sizes()
-            # 获取颜色条标题
-            cbar_title = self.cbar_title_edit.text()
+            # 创建新图形
+            fig, ax = plt.subplots(figsize=(12, 10))
 
-            # 根据字体大小调整图形高度
-            height_factor = 1 + (font_sizes["cbar_label"] - 10) / 40
-            height = max(8, 8 * height_factor)  # 最小高度8英寸
+            # 绘制热图
+            self.draw_heatmap(ax, self.current_heatmap_data, "热图", is_save=True)
 
-            # 创建新图形保存
-            fig, ax = plt.subplots(figsize=(12, height))  # 使用新高度
-
-            # 获取选择的颜色条
-            cmap = self.cmap_combo.currentText()
-
-            # 绘制热图并获取颜色条
-            heatmap = sns.heatmap(
-                self.current_heatmap_data,
-                ax=ax,
-                cmap=cmap,
-                annot=False,
-                fmt=".2f",
-                xticklabels=self.show_ticks_cb.isChecked(),
-                yticklabels=self.show_ticks_cb.isChecked(),
-                cbar_kws={
-                    "shrink": 1.0,  # 固定比例
-                    "location": "right",  # 位置在右侧
-                    "pad": 0.05,  # 与主图的间距
-                }
-            )
-
-            # 设置标题
-            ax.set_title(
-                f"热图 - {self.process_combo.currentText()}",
-                fontfamily="Times New Roman",
-                fontsize=font_sizes["title"],
-                fontweight='bold',
-                pad=20
-            )
-
-            # 设置坐标轴标签
-            if self.show_x_label_cb.isChecked():
-                ax.set_xlabel(
-                    "X轴",
-                    fontfamily="Times New Roman",
-                    fontsize=font_sizes["axis_label"],
-                    labelpad=15
-                )
-
-            if self.show_y_label_cb.isChecked():
-                ax.set_ylabel(
-                    "Y轴",
-                    fontfamily="Times New Roman",
-                    fontsize=font_sizes["axis_label"],
-                    labelpad=15
-                )
-
-            # 设置刻度标签
-            for label in ax.get_xticklabels():
-                label.set_fontname("Times New Roman")
-                label.set_fontsize(font_sizes["tick_label"])
-
-            for label in ax.get_yticklabels():
-                label.set_fontname("Times New Roman")
-                label.set_fontsize(font_sizes["tick_label"])
-
-            # 设置颜色条 - 标题放在上方
-            if heatmap.collections[0].colorbar is not None:
-                cbar = heatmap.collections[0].colorbar
-
-                # 移除默认标签
-                cbar.set_label('')
-
-                # 创建新的标签放在上方
-                cbar.ax.set_title(
-                    cbar_title,
-                    fontfamily="Times New Roman",
-                    fontsize=font_sizes["cbar_label"],
-                    fontweight='bold',
-                    pad=10  # 与颜色条的间距
-                )
-
-                # 设置颜色条刻度标签
-                cbar.ax.tick_params(
-                    axis='y',
-                    labelsize=font_sizes["cbar_tick"],
-                    which='both'
-                )
-
-                # 确保所有刻度标签都应用Times New Roman
-                for label in cbar.ax.get_yticklabels():
-                    label.set_fontname("Times New Roman")
-                    label.set_fontweight('bold')
+            # 调整布局
+            fig.tight_layout(pad=3.0)
 
             # 保存图片
             fig.savefig(file_path, bbox_inches='tight', dpi=300)
