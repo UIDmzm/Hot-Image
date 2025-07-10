@@ -103,7 +103,7 @@ class HeatmapApp(QMainWindow):
         self.process_combo.setCurrentIndex(0)
         self.cmap_combo.setCurrentIndex(0)
         self.cbar_title_edit.setText("Normalized Current")
-        self.font_size_edit.setText("10")
+        self.font_size_edit.setText("5")
 
         # 应用样式
         self.apply_styles()
@@ -277,7 +277,7 @@ class HeatmapApp(QMainWindow):
 
         # 行 8: 颜色条标题设置
         layout.addWidget(QLabel("颜色条标题:"), 8, 0)
-        self.cbar_title_edit = QLineEdit("数值")
+        self.cbar_title_edit = QLineEdit()
         self.cbar_title_edit.setToolTip("设置颜色条的标题")
         layout.addWidget(self.cbar_title_edit, 8, 1, 1, 3)
 
@@ -319,13 +319,13 @@ class HeatmapApp(QMainWindow):
         try:
             base_size = int(self.font_size_edit.text())
         except ValueError:
-            base_size = 10  # 默认值
+            base_size = 5  # 默认值
 
         return {
             "title": base_size * 2.4,  # 标题字体大小
             "axis_label": base_size * 2.0,  # 坐标轴标签字体大小
             "tick_label": base_size * 1.8,  # 刻度标签字体大小
-            "cbar_label": base_size * 4.0,  # 颜色条标签字体大小
+            "cbar_label": 12,  # 颜色条标签字体大小
             "cbar_tick": base_size * 2.4,  # 颜色条刻度字体大小
         }
 
@@ -661,11 +661,11 @@ class HeatmapApp(QMainWindow):
         )
 
         # 设置标题
-        ax.set_title(
-            title,
-            fontproperties=title_font,
-            pad=20
-        )
+        # ax.set_title(
+        #     title,
+        #     fontproperties=title_font,
+        #     pad=20
+        # )
 
         # 设置坐标轴标签
         if self.show_x_label_cb.isChecked():
