@@ -704,7 +704,7 @@ class HeatmapApp(QMainWindow):
             cbar.ax.set_title(
                 cbar_title,
                 fontproperties=cbar_font,
-                pad=10
+                pad=20
             )
 
             # 设置颜色条刻度标签
